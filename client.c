@@ -184,12 +184,278 @@ FILE *openFile() {
 
 /* ================================================================
  * parseLine() — Stateful tokenizer for key:value pairs
+ * 
+ * This function tokenizes a line of text into key:value pairs.
+ * For each pair, it:
+ *  1. Extracts the key (everything before the ':')
+ *  2. Extracts the value (quoted or unquoted)
+ *  3. Adds the pair to a cJSON object
+ * 
+ * Validation:
+ *  - If any key or value on the line fails validation, the ENTIRE
+ *    line is discarded.
+ *  - Keys must be non-empty with no whitespace or colons.
+ *  - Values can be quoted or unquoted.
+ *  - Unquoted values may not contain whitespace.
+ *  - Quoted values keep their enclosing quotes as part of the value
+ *  - Escaped characters are are valid and become plain characters
+ *  - Example input:  msg:"hello \"world\""
+ *  - Stored key: msg
+ *  - Stored value: "hello "world""
+ * 
+ * Returns: cJSON* on success, NULL on empty/invalid lines
  * ================================================================
  */
 cJSON *parseLine(const char *line) {
-    // TEMPORARY IMPLEMENTATION
-    printf("parseLine() skeleton compiled successfully\n");
-    return NULL;
+    const char *pos = line; // Current read position in the line
+    char key[MAX_TOKEN]; // Buffer for the current key
+    char value[MAX_TOKEN]; // Buffer for the current value
+    int pairCount = 0; // Number of key:value pairs added
+
+    // Step 1: Skip leading whitespace
+    while (*pos && isspace((unsigned char)*pos)) {
+        pos++;
+    }
+    
+    if (*pos == '\0' || *pos == '\n') {
+        return NULL;
+    }
+
+    // Step 2: Create empty cJSON object
+    cJSON *obj = cJSON_CreateObject();
+    if (obj == NULL) {
+        return NULL;
+    }
+
+    // Step 3: Main parsing loop
+    while (*pos != '\0' && *pos != '\n') {
+        
+        // Skip whitespace between pairs
+        while (*pos && *pos != '\n' && isspace((unsigned char)*pos)) {
+            pos++;
+        }
+
+        // Check if we've reached the end after skipping whitespace
+        if (*pos == '\0' || *pos == '\n') {
+            break;
+        }
+
+        /*
+         * Extract key
+         * Valid key characters:
+         *  - anything except whitespace, ':', '"', '\\', '\0', and '\n'.
+         */
+        const char *keyStart = pos;
+        while (*pos != '\0' && *pos != '\n' && *pos != ':' &&
+               !isspace((unsigned char)*pos) && *pos != '"' && *pos != '\\') {
+            pos++;
+        }
+
+        // Check what character stopped the key scan (only ':' is a valid stop)
+        if (*pos != ':') {
+            if (isspace((unsigned char)*pos)) {
+                printf("Warning: whitespace in key, skipping line\n");
+            }
+            else if (*pos == '"') {
+                printf("Warning: quote character in key, skipping line\n");
+            }
+            else if (*pos == '\\') {
+                printf("Warning: backslash in key, skipping line\n");
+            }
+            else {
+                printf("Warning: no colon found in token, skipping line\n");
+            }
+
+            cJSON_Delete(obj);
+            return NULL;
+        }
+
+        // Calculate key length
+        int keyLen = (int)(pos - keyStart);
+
+        // Empty key — colon appeared at the start, like ":value"
+        if (keyLen == 0) {
+            printf("Warning: empty key found, skipping line\n");
+            cJSON_Delete(obj);
+            return NULL;
+        }
+
+        // Key exceeds buffer size
+        if (keyLen >= MAX_TOKEN) {
+            printf("Warning: key too long, skipping line\n");
+            cJSON_Delete(obj);
+            return NULL;
+        }
+
+        // Copy key into buffer and null-terminate
+        memcpy(key, keyStart, keyLen);
+        key[keyLen] = '\0';
+
+        // Advance past the ':' delimiter
+        pos++;
+
+        // Check for whitespace after colon
+        if (isspace((unsigned char)*pos)) {
+            printf("Warning: whitespace after colon for key '%s', skipping line\n", key);
+            cJSON_Delete(obj);
+            return NULL;
+        }
+
+        /* 
+         * Extract value
+         * 
+         * Two modes: Quoted and Unquoted
+         *  - Quoted: may contain spaces and escapes
+         *  - Unquoted: may not contain spaces or backslashes
+         */
+        int valueLen = 0;
+
+        // Quoted mode: value starts with '"'
+        if (*pos == '"') {
+            // Store the opening quote as part of the value
+            value[0] = '"';
+            valueLen++;
+
+            // Advance past the opening quote
+            pos++;
+
+            // Walk through the quoted content
+            while (*pos != '\0' && *pos != '\n') {
+
+                // Check for escape sequences
+                if (*pos == '\\') {
+                    char nextChar = *(pos + 1);
+
+                    // Trailing backslash — no character to escape.
+                    if (nextChar == '\0' || nextChar == '\n') {
+                        printf("Warning: trailing backslash in quoted value, skipping line\n");
+                        cJSON_Delete(obj);
+                        return NULL;
+                    }
+
+                    char escaped;
+                    switch (nextChar) {
+                        case '"': /* \" -> " */
+                            escaped = '"';
+                            break;
+                        case '\\': /* \\ -> \ */
+                            escaped = '\\';
+                            break;
+                        case 'n': /* \n -> newline */
+                            escaped = '\n';
+                            break;
+                        case 't': /* \t -> tab */
+                            escaped = '\t';
+                            break;
+                        case 'r': /* \r -> carriage return */
+                            escaped = '\r';
+                            break;
+                        default:
+                            printf("Warning: unrecognized escape sequence '\\%c' in quoted value, skipping line\n", nextChar);
+                            cJSON_Delete(obj);
+                            return NULL;
+                    }
+
+                    if (valueLen >= MAX_TOKEN - 1) {
+                        printf("Warning: value too long, skipping line\n");
+                        cJSON_Delete(obj);
+                        return NULL;
+                    }
+                    value[valueLen] = escaped;
+                    valueLen++;
+                    
+                    // Skip both the backslash and the escape char
+                    pos += 2;
+                }
+
+                else if (*pos == '"') {
+                    // Closing quote — end of quoted value
+                    break; // Exit the loop, store the end quote after the loop
+                }
+
+                else {
+                    // Regular character — copy it to the value buffer
+                    if (valueLen >= MAX_TOKEN - 1) {
+                        printf("Warning: value too long, skipping line\n");
+                        cJSON_Delete(obj);
+                        return NULL;
+                    }
+                    value[valueLen] = *pos;
+                    valueLen++;
+                    pos++;
+                }
+            }
+
+            // Check for unclosed quote
+            if (*pos != '"') {
+                printf("Warning: unclosed quote, skipping line\n");
+                cJSON_Delete(obj);
+                return NULL;
+            }
+
+            // Store the closing quote as part of the value
+            if (valueLen >= MAX_TOKEN - 1) {
+                printf("Warning: value too long, skipping line\n");
+                cJSON_Delete(obj);
+                return NULL;
+            }
+
+            value[valueLen] = '"';
+            valueLen++;
+            value[valueLen] = '\0';
+
+            // Advance past the closing quote
+            pos++;   
+        }
+
+        // Unquoted mode
+        else {
+            const char *valueStart = pos;
+            while (*pos != '\0' && *pos != '\n' &&
+                   !isspace((unsigned char)*pos) && *pos != '\\') {
+                pos++;    
+            }
+
+            // Backslash in unquoted value — not allowed.
+            if (*pos == '\\') {
+                printf("Warning: backslash in unquoted value for key '%s', skipping line\n", key);
+                cJSON_Delete(obj);
+                return NULL;
+            }
+
+            valueLen = (int)(pos - valueStart);
+            
+            // Empty value — colon with nothing after it, like "key:"
+            if (valueLen == 0) {
+                printf("Warning: empty value for key '%s', skipping line\n", key);
+                cJSON_Delete(obj);
+                return NULL;
+            }
+
+            // Value exceeds buffer size
+            if (valueLen >= MAX_TOKEN) {
+                printf("Warning: value too long, skipping line\n");
+                cJSON_Delete(obj);
+                return NULL;
+            }
+
+            // Copy value into buffer and null-terminate
+            memcpy(value, valueStart, valueLen);
+            value[valueLen] = '\0';
+        }
+
+        // Add the key:value pair to the cJSON object
+        cJSON_AddStringToObject(obj, key, value);
+        pairCount++;
+    }
+
+    // If no pairs were successfully parsed, discard the object.
+    if (pairCount == 0) {
+        cJSON_Delete(obj);
+        return NULL;
+    }
+
+    return obj;
 }
 
 /* ================================================================
