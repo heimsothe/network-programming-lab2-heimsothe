@@ -70,8 +70,9 @@ char *rtrim(char *s);
  * 
  * Flow:
  *  1. Validate arguments (need exactly 3: program, IP, port)
- *  2. Validate IP address with inet_pton()
+ *  2. Validate and store IP Address in server_address
  *  3. Validate port number (all digits, range 0-65535)
+ *  4. Create socket and complete server address struct
  * ================================================================
  */
 int main(int argc, char *argv[]) {
@@ -79,20 +80,20 @@ int main(int argc, char *argv[]) {
     struct sockaddr_in server_address; // Server address structure for sendto()
     int portNumber; // Port number (converted from string)
     
-    // Validate arguments (need exactly 3: program, IP, port)
+    // Step 1: Validate arguments (need exactly 3: program, IP, port)
     if (argc < 3) {
         printf("Error: Usage is client <ipaddr> <portnumber>\n");
         exit(1);
     }
 
-    // Validate and store IP Address in server_address
+    // Step 2: Validate and store IP Address in server_address
     if (!inet_pton(AF_INET, argv[1], &server_address.sin_addr)) {
         printf("Error: Bad IP address\n");
         printf("Valid IP Range: 0.0.0.0 - 255.255.255.255\n");
         exit(1);
     }
 
-    // Validate port number
+    // Step 3: Validate port number (all digits, range 0-65535)
     for (size_t i = 0; i < strlen(argv[2]); i++) {
         if (!isdigit(argv[2][i])) {
             printf("Error: The port number isn't a number\n");
@@ -106,18 +107,35 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    // Step 4: Create socket and complete server address struct
+    makeSocket(&sd, portNumber, &server_address);
 
+    printf("Socket created, server address set to %s:%d\n", argv[1], portNumber);
 
+    // Clean up and exit
+    close(sd);
     return 0;
 }
 
 /* ================================================================
  * makeSocket() — Create UDP socket and complete server address struct
+ * 
+ * This function:
+ *  1. Creates a UDP socket
+ *  2. Completes the server address struct by setting the address family and port number
+ * 
+ * Note: the address (sin_addr) was already set by main()
  * ================================================================
  */
 void makeSocket(int *sd, int port, struct sockaddr_in *server_address) {
-    // TEMPORARY IMPLEMENTATION
-    printf("makeSocket() skeleton compiled successfully\n");
+    *sd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (*sd == -1) {
+        perror("socket");
+        exit(1);
+    }
+    server_address->sin_family = AF_INET;
+    server_address->sin_port = htons(port);
+    // sin_addr was already set by main()
 }
 
 /* ================================================================
