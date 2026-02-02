@@ -73,6 +73,7 @@ char *rtrim(char *s);
  *  2. Validate and store IP Address in server_address
  *  3. Validate port number (all digits, range 0-65535)
  *  4. Create socket and complete server address struct
+ *  5. Open the data file
  * ================================================================
  */
 int main(int argc, char *argv[]) {
@@ -112,7 +113,13 @@ int main(int argc, char *argv[]) {
 
     printf("Socket created, server address set to %s:%d\n", argv[1], portNumber);
 
+    // Step 5: Open the data file
+    FILE *fptr = openFile();
+    
+    printf("File opened successfully\n");
+
     // Clean up and exit
+    fclose(fptr);
     close(sd);
     return 0;
 }
@@ -140,12 +147,39 @@ void makeSocket(int *sd, int port, struct sockaddr_in *server_address) {
 
 /* ================================================================
  * openFile() — Prompt for filename, open and return FILE*
+ * 
+ * This function:
+ *  1. 
  * ================================================================
  */
 FILE *openFile() {
-    // TEMPORARY IMPLEMENTATION
-    printf("openFile() skeleton compiled successfully\n");
-    return NULL;
+    FILE *fptr = NULL;
+    char fileName[100]; // Buffer for user input (filename)
+
+    while (1) {
+        memset(fileName, 0, 100);
+        printf("What is the name of the data file? ");
+
+        if (fgets(fileName, sizeof(fileName), stdin) == NULL) {
+            perror("fgets");
+            exit(1);
+        }
+
+        rtrim(fileName);
+
+        if (strlen(fileName) == 0) {
+            printf("Error: Must enter a filename.\n");
+            continue;
+        }
+
+        fptr = fopen(fileName, "r");
+        if (fptr == NULL) {
+            printf("Error: Could not open file %s\n", fileName);
+            continue;
+        }
+
+        return fptr;
+    }
 }
 
 /* ================================================================
@@ -160,10 +194,31 @@ cJSON *parseLine(const char *line) {
 
 /* ================================================================
  * rtrim() — Strip trailing whitespace
+ * 
+ * This function:
+ *  1. Strips trailing whitespace (including newline) from a string
+ *  2. Is used by openFile() to clean fgets() input
  * ================================================================
  */
 char *rtrim(char *s) {
-    // TEMPORARY IMPLEMENTATION
-    printf("rtrim() skeleton compiled successfully\n");
+    char *back;
+
+    // Guards against NULL or empty strings
+    if (s == NULL || *s == '\0') {
+        return s;
+    }
+
+    // Start at the last character of the string before the null terminator
+    back = s + strlen(s) - 1;
+
+    // Walk backwards while the character is whitespace
+    while (back >= s && isspace((unsigned char)*back)) {
+        back--;
+    }
+
+    // Place null terminator after the last non-whitespace character
+    *(back + 1) = '\0';
+
+    // Return the trimmed string
     return s;
 }
