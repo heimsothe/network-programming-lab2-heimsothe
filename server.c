@@ -40,6 +40,7 @@ int main(int argc, char *argv[]) {
     int portNumber; // Port number
 
     // Step 1: Validate arguments (need exactly 2: program, port)
+    printf("========================SETUP========================\n");
     if (argc < 2) {
         printf("Error: Usage is server <portnumber>\n");
         exit(1);
@@ -59,7 +60,43 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    printf("Port validated: %d\n", portNumber);
+    // Step 3: Create socket and bind to port
+    setupSocket(&sd, portNumber, &server_address, SOCKET_SERVER);
+    printf("Socket created, listening on port %d...\n", portNumber);
+    printf("=====================================================\n\n");
 
+    // Step 4: Receive loop
+    char buffer[BUFFER_SIZE]; // Buffer for incoming data
+    struct sockaddr_in client_address; // Client address (filled by recvfrom)
+    socklen_t addr_len; // Length of client address
+    int bytesReceived; // Return value from recvfrom
+    char clientIP[INET_ADDRSTRLEN]; // IP address of client
+
+    while (1) {
+        // Reset addr_len before EACH recvfrom() call.
+        addr_len = sizeof(client_address);
+
+        // Receive data from client
+        bytesReceived = recvfrom(sd, buffer, BUFFER_SIZE, 0,
+                                (struct sockaddr *)&client_address, &addr_len);
+        
+        if (bytesReceived == -1) {
+            perror("recvfrom");
+            continue;
+        }
+
+        // Null terminate buffer
+        buffer[bytesReceived] = '\0';
+
+        // Convert client binary IP to string
+        inet_ntop(AF_INET, &client_address.sin_addr, clientIP, INET_ADDRSTRLEN);
+
+        printf("Received from %s:%d\n", clientIP, ntohs(client_address.sin_port));
+        printf("Raw data (%d bytes): %s\n", bytesReceived, buffer);
+        printf("-----------------------------\n\n");
+    }
+    
+    // Cleanup
+    close(sd);
     return 0;
 }
