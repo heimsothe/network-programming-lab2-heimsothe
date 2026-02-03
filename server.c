@@ -111,7 +111,7 @@ int main(int argc, char *argv[]) {
         printf("=====================================================\n\n");
     }
     
-    // Cleanup
+    // Cleanup (Unreachable code)
     close(sd);
     return 0;
 }

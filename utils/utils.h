@@ -16,7 +16,8 @@
  * ---------------------------------------------------------------- */
 typedef enum {
     FORMAT_CLIENT,  // Simple "key: value" format
-    FORMAT_SERVER   // Right-aligned columns (20 char minimum each)
+    FORMAT_SERVER,  // Right-aligned columns (20 char minimum each)
+    FORMAT_DEBUG    // Debug mode (cJSON_Print)
 } OutputFormat;
 
 /* ----------------------------------------------------------------

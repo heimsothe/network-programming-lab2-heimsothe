@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <errno.h>
 
 // Networking headers
 #include <sys/socket.h>
@@ -482,8 +483,53 @@ cJSON *parseLine(const char *line) {
             value[valueLen] = '\0';
         }
 
-        // Add the key:value pair to the cJSON object
-        cJSON_AddStringToObject(obj, key, value);
+        /*
+         * Type Detection and cJSON Object Construction
+         *
+         * 1. Boolean: "true" or "false" (case-insensitive)
+         * 2. Number: valid numeric format (integers, floats, scientific notation)
+         * 3. String: everything else
+         * 4. Quoted values are always treated as strings.
+         */
+
+        // Quoted values are always strings
+        if (value[0] == '"') {
+            cJSON_AddStringToObject(obj, key, value);
+        }
+        // Boolean detection
+        else if (strcasecmp(value, "true") == 0) {
+            cJSON_AddBoolToObject(obj, key, 1);
+        }
+        else if (strcasecmp(value, "false") == 0) {
+            cJSON_AddBoolToObject(obj, key, 0);
+        }
+        // Number detection using strtod()
+        else {
+            /*
+             * strtod() converts a string to double:
+             *  - Integers: "42", "-5", "+5"
+             *  - Floats: "3.14", "-0.5"
+             *  - Scientific notation: "1e10", "3.14e-2"
+             *
+             * Validate by checking:
+             *  - endptr != value: at least one character was parsed
+             *  - *endptr == '\0': entire string was consumed (no trailing chars)
+             *  - errno != ERANGE: no overflow/underflow occurred
+             */
+            char *endptr;
+            errno = 0;  // Clear errno before strtod() call
+            double numValue = strtod(value, &endptr);
+
+            if (endptr != value && *endptr == '\0' && errno != ERANGE) {
+                // Valid number — store as cJSON number
+                cJSON_AddNumberToObject(obj, key, numValue);
+            }
+            else {
+                // Not a valid number — store as string
+                cJSON_AddStringToObject(obj, key, value);
+            }
+        }
+
         pairCount++;
     }
 

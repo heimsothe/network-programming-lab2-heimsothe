@@ -15,6 +15,11 @@
 /* ================================================================
  * printJSONObject() — Display all key-value pairs in a cJSON object
  *
+ * Handles three JSON value types:
+ *  - Strings: printed as-is (quoted strings retain their quotes)
+ *  - Booleans: printed as "true" or "false"
+ *  - Numbers: printed using %g (auto-formats integers and floats)
+ *
  * Output format depends on the format parameter:
  *   FORMAT_CLIENT: Simple left-aligned "key: value"
  *   FORMAT_SERVER: Right-aligned columns (20 char minimum each)
@@ -26,18 +31,56 @@ void printJSONObject(cJSON *obj, OutputFormat format) {
         return;
     }
 
+    if (format == FORMAT_DEBUG) {
+        printf("DEBUG MODE:\n");
+        printf("%s\n", cJSON_Print(obj));
+        return;
+    }
+
     cJSON *item = NULL;
     cJSON_ArrayForEach(item, obj) {
+        /*
+         * Print key based on format:
+         *   FORMAT_SERVER: Right-aligned, 20-char width
+         *   FORMAT_CLIENT: Left-aligned, no padding
+         */
+        if (format == FORMAT_SERVER) {
+            printf("%20s: ", item->string);
+        }
+        else if (format == FORMAT_CLIENT) {
+            printf("Parsed JSON data:\n");
+            printf("%s: ", item->string);
+        }
+
+        /*
+         * Print value based on cJSON type:
+         *   - String: use valuestring directly
+         *   - Boolean: print "true" or "false" based on cJSON_IsTrue()
+         *   - Number: use %g format (auto handles integers and floats)
+         */
         if (cJSON_IsString(item)) {
             if (format == FORMAT_SERVER) {
-                // Right-aligned columns, 20 character minimum each
-                printf("%20s: %20s\n", item->string, item->valuestring);
+                printf("%20s\n", item->valuestring);
             }
-            
-            else if (format == FORMAT_CLIENT) {
-                printf("Parsed JSON data:\n");
-                // FORMAT_CLIENT: Simple left-aligned format
-                printf("%s: %s\n", item->string, item->valuestring);
+            else {
+                printf("%s\n", item->valuestring);
+            }
+        }
+        else if (cJSON_IsBool(item)) {
+            const char *boolStr = cJSON_IsTrue(item) ? "true" : "false";
+            if (format == FORMAT_SERVER) {
+                printf("%20s\n", boolStr);
+            }
+            else {
+                printf("%s\n", boolStr);
+            }
+        }
+        else if (cJSON_IsNumber(item)) {
+            if (format == FORMAT_SERVER) {
+                printf("%20g\n", item->valuedouble);
+            }
+            else {
+                printf("%g\n", item->valuedouble);
             }
         }
     }
