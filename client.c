@@ -27,18 +27,13 @@
 // cJSON library
 #include "cJSON.h"
 
+// Shared utilities
+#include "utils.h"
+
 // Constants
 #define MAX_TOKEN 1024 // Maximum bytes for a single key or value token during parsing.
 
 // Function prototypes
-
-/*
- * makeSocket():
- * Creates a UDP socket and fills in the server address structure.
- * Receives the port number and a server_address struct with IP address
- * field already validated/set by main().
- */
-void makeSocket(int *sd, int port, struct sockaddr_in *server_address);
 
 /*
  * openFile():
@@ -54,13 +49,6 @@ FILE *openFile();
  * Any error on the line discards the entire line.
  */
 cJSON *parseLine(const char *line);
-
-/*
- * printJSONObject():
- * Iterates all children of a cJSON object and prints each key-value pair.
- * Used to display JSON data before sending.
- */
-void printJSONObject(cJSON *obj);
 
 /*
  * rtrim():
@@ -116,7 +104,7 @@ int main(int argc, char *argv[]) {
 
     // Step 4: Create socket and complete server address struct
     printf("========================SETUP========================\n");
-    makeSocket(&sd, portNumber, &server_address);
+    setupSocket(&sd, portNumber, &server_address, SOCKET_CLIENT);
 
     printf("Socket created, server address set to %s:%d\n", argv[1], portNumber);
 
@@ -152,7 +140,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Print all key-value pairs.
-        printJSONObject(json);
+        printJSONObject(json, FORMAT_CLIENT);
         printf("\n");
 
         // Send the JSON string
@@ -186,27 +174,6 @@ int main(int argc, char *argv[]) {
     fclose(fptr);
     close(sd);
     return 0;
-}
-
-/* ================================================================
- * makeSocket() — Create UDP socket and complete server address struct
- * 
- * This function:
- *  1. Creates a UDP socket
- *  2. Completes the server address struct by setting the address family and port number
- * 
- * Note: the address (sin_addr) was already set by main()
- * ================================================================
- */
-void makeSocket(int *sd, int port, struct sockaddr_in *server_address) {
-    *sd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (*sd == -1) {
-        perror("socket");
-        exit(1);
-    }
-    server_address->sin_family = AF_INET;
-    server_address->sin_port = htons(port);
-    // sin_addr was already set by main()
 }
 
 /* ================================================================
@@ -527,43 +494,6 @@ cJSON *parseLine(const char *line) {
     }
 
     return obj;
-}
-
-/* ================================================================
- * printJSONObject() — Custom display of key:value pairs in a cJSON object
- *
- * This function iterates through a cJSON object and prints each
- * key:value pair
- * ================================================================
- */
-void printJSONObject(cJSON *obj) {
-    // Verify valid cJSON object.
-    if (obj == NULL || !cJSON_IsObject(obj)) {
-        printf("Error: Invalid JSON object\n");
-        return;
-    }
-
-    printf("Parsed JSON data:\n");
-
-    /*
-     * Iterate through all key-value pairs in the object.
-     *
-     * cJSON represents objects as a linked list:
-     *   obj->child points to the first item
-     *   item->next points to the next sibling
-     *
-     * cJSON_ArrayForEach handles this traversal
-     */
-    cJSON *item = NULL;
-    cJSON_ArrayForEach(item, obj) {
-        /*
-         * item->string contains the key name
-         * item->valuestring contains the string value
-         */
-        if (cJSON_IsString(item)) {
-            printf("%s: %s\n", item->string, item->valuestring);
-        }
-    }
 }
 
 /* ================================================================

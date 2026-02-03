@@ -3,11 +3,11 @@ CFLAGS = -Wall -g
 
 all: client server
 
-client: client.c cJSON.c cJSON.h
-	$(CC) $(CFLAGS) -o client client.c cJSON.c
+client: client.c utils.c cJSON.c cJSON.h utils.h
+	$(CC) $(CFLAGS) -o client client.c utils.c cJSON.c
 
-server: server.c cJSON.c cJSON.h
-	$(CC) $(CFLAGS) -o server server.c cJSON.c
+server: server.c utils.c cJSON.c cJSON.h utils.h
+	$(CC) $(CFLAGS) -o server server.c utils.c cJSON.c
 
 clean:
 	rm -f client server
