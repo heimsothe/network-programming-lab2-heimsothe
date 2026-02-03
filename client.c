@@ -144,7 +144,7 @@ int main(int argc, char *argv[]) {
          * Convert cJSON object to a JSON string.
          * This is what will be sent over the network.
          */
-        char *jsonString = cJSON_Print(json);
+        char *jsonString = cJSON_PrintUnformatted(json);
         if (jsonString == NULL) {
             printf("Error: cJSON_Print() allocation failed, skipping\n");
             cJSON_Delete(json);
