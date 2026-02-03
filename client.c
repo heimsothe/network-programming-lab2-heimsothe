@@ -211,9 +211,6 @@ void makeSocket(int *sd, int port, struct sockaddr_in *server_address) {
 
 /* ================================================================
  * openFile() — Prompt for filename, open and return FILE*
- * 
- * This function:
- *  1. 
  * ================================================================
  */
 FILE *openFile() {
