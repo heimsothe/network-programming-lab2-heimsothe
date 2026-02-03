@@ -27,11 +27,8 @@
 // cJSON library
 #include "cJSON.h"
 
-/* 
- * Constants:
- * Maximum bytes for a single key or value token during parsing.
- */
-#define MAX_TOKEN 1024
+// Constants
+#define MAX_TOKEN 1024 // Maximum bytes for a single key or value token during parsing.
 
 // Function prototypes
 
@@ -58,7 +55,14 @@ FILE *openFile();
  */
 cJSON *parseLine(const char *line);
 
-/* 
+/*
+ * printJSONObject():
+ * Iterates all children of a cJSON object and prints each key-value pair.
+ * Used to display JSON data before sending.
+ */
+void printJSONObject(cJSON *obj);
+
+/*
  * rtrim():
  * Strips trailing whitespace (including newline) from a string.
  * Used by openFile() to clean fgets() input.
@@ -74,6 +78,8 @@ char *rtrim(char *s);
  *  3. Validate port number (all digits, range 0-65535)
  *  4. Create socket and complete server address struct
  *  5. Open the data file
+ *  6. Read loop: parse each line, serialize, send
+ *  7. Cleanup and exit
  * ================================================================
  */
 int main(int argc, char *argv[]) {
@@ -109,6 +115,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Step 4: Create socket and complete server address struct
+    printf("========================SETUP========================\n");
     makeSocket(&sd, portNumber, &server_address);
 
     printf("Socket created, server address set to %s:%d\n", argv[1], portNumber);
@@ -117,6 +124,63 @@ int main(int argc, char *argv[]) {
     FILE *fptr = openFile();
     
     printf("File opened successfully\n");
+    printf("=====================================================\n\n");
+
+    // Step 6: Read loop: parse each line, serialize, send
+    char *line = NULL;
+    size_t lineLen = 0;
+    ssize_t lengthRead;
+    int sentCount = 0;
+
+    // getline() reads one line at a time
+    while ((lengthRead = getline(&line, &lineLen, fptr)) != -1) {
+        // Parse the line into a cJSON object
+        cJSON *json = parseLine(line);
+        if (json == NULL) {
+            continue; // Skip invalid/empty lines
+        }
+
+        /*
+         * Convert cJSON object to a JSON string.
+         * This is what will be sent over the network.
+         */
+        char *jsonString = cJSON_Print(json);
+        if (jsonString == NULL) {
+            printf("Error: cJSON_Print() allocation failed, skipping\n");
+            cJSON_Delete(json);
+            continue;
+        }
+
+        // Print all key-value pairs.
+        printJSONObject(json);
+        printf("\n");
+
+        // Send the JSON string
+        int bytesSent = sendto(sd, jsonString, strlen(jsonString), 0,
+                               (struct sockaddr *)&server_address,
+                               sizeof(server_address));
+        
+        if (bytesSent == -1) {
+            perror("sendto");
+        }
+        else {
+            printf("Sent %d bytes to %s:%d\n", bytesSent, argv[1], portNumber);
+            printf("\n");
+            sentCount++;
+        }
+
+        // Clean up the cJSON object and the JSON string
+        cJSON_Delete(json);
+        free(jsonString);
+
+        // Wait for 0.5 seconds before sending the next JSON object
+        usleep(500000);
+    }
+
+    // Clean up the line buffer
+    free(line);
+
+    printf("Done! Sent %d JSON objects.\n", sentCount);
 
     // Clean up and exit
     fclose(fptr);
@@ -217,6 +281,7 @@ cJSON *parseLine(const char *line) {
         pos++;
     }
     
+    // If the line is empty, return NULL
     if (*pos == '\0' || *pos == '\n') {
         return NULL;
     }
@@ -333,6 +398,7 @@ cJSON *parseLine(const char *line) {
                         return NULL;
                     }
 
+                    // Determine the escaped character
                     char escaped;
                     switch (nextChar) {
                         case '"': /* \" -> " */
@@ -356,6 +422,7 @@ cJSON *parseLine(const char *line) {
                             return NULL;
                     }
 
+                    // Check if the value is too long
                     if (valueLen >= MAX_TOKEN - 1) {
                         printf("Warning: value too long, skipping line\n");
                         cJSON_Delete(obj);
@@ -375,6 +442,7 @@ cJSON *parseLine(const char *line) {
 
                 else {
                     // Regular character — copy it to the value buffer
+                    // Check if the value is too long
                     if (valueLen >= MAX_TOKEN - 1) {
                         printf("Warning: value too long, skipping line\n");
                         cJSON_Delete(obj);
@@ -400,6 +468,7 @@ cJSON *parseLine(const char *line) {
                 return NULL;
             }
 
+            // Store the closing quote as part of the value
             value[valueLen] = '"';
             valueLen++;
             value[valueLen] = '\0';
@@ -411,6 +480,11 @@ cJSON *parseLine(const char *line) {
         // Unquoted mode
         else {
             const char *valueStart = pos;
+
+            /*
+             * Walk through the unquoted content
+             * Stopping at whitespace, newline, or backslash, or end of string.
+             */
             while (*pos != '\0' && *pos != '\n' &&
                    !isspace((unsigned char)*pos) && *pos != '\\') {
                 pos++;    
@@ -456,6 +530,43 @@ cJSON *parseLine(const char *line) {
     }
 
     return obj;
+}
+
+/* ================================================================
+ * printJSONObject() — Custom display of key:value pairs in a cJSON object
+ *
+ * This function iterates through a cJSON object and prints each
+ * key:value pair
+ * ================================================================
+ */
+void printJSONObject(cJSON *obj) {
+    // Verify valid cJSON object.
+    if (obj == NULL || !cJSON_IsObject(obj)) {
+        printf("Error: Invalid JSON object\n");
+        return;
+    }
+
+    printf("Parsed JSON data:\n");
+
+    /*
+     * Iterate through all key-value pairs in the object.
+     *
+     * cJSON represents objects as a linked list:
+     *   obj->child points to the first item
+     *   item->next points to the next sibling
+     *
+     * cJSON_ArrayForEach handles this traversal
+     */
+    cJSON *item = NULL;
+    cJSON_ArrayForEach(item, obj) {
+        /*
+         * item->string contains the key name
+         * item->valuestring contains the string value
+         */
+        if (cJSON_IsString(item)) {
+            printf("%s: %s\n", item->string, item->valuestring);
+        }
+    }
 }
 
 /* ================================================================
