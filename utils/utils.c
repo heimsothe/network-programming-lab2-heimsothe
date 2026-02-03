@@ -26,8 +26,6 @@ void printJSONObject(cJSON *obj, OutputFormat format) {
         return;
     }
 
-    printf("Parsed JSON data:\n");
-
     cJSON *item = NULL;
     cJSON_ArrayForEach(item, obj) {
         if (cJSON_IsString(item)) {
@@ -37,6 +35,7 @@ void printJSONObject(cJSON *obj, OutputFormat format) {
             }
             
             else if (format == FORMAT_CLIENT) {
+                printf("Parsed JSON data:\n");
                 // FORMAT_CLIENT: Simple left-aligned format
                 printf("%s: %s\n", item->string, item->valuestring);
             }
