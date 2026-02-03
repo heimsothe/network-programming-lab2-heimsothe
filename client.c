@@ -28,7 +28,7 @@
 #include "cJSON.h"
 
 // Shared utilities
-#include "utils.h"
+#include "utils/utils.h"
 
 // Constants
 #define MAX_TOKEN 1024 // Maximum bytes for a single key or value token during parsing.
