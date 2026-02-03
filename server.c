@@ -92,8 +92,23 @@ int main(int argc, char *argv[]) {
         inet_ntop(AF_INET, &client_address.sin_addr, clientIP, INET_ADDRSTRLEN);
 
         printf("Received from %s:%d\n", clientIP, ntohs(client_address.sin_port));
-        printf("Raw data (%d bytes): %s\n", bytesReceived, buffer);
-        printf("-----------------------------\n\n");
+        printf("=====================================================\n");
+        
+        // Parse the JSON string into a cJSON object
+        cJSON *json = cJSON_Parse(buffer);
+        if (json == NULL) {
+            printf("Invalid JSON received: %s\n", buffer);
+            printf("=====================================================\n\n");
+            continue;
+        }
+
+        // Print the parsed JSON
+        printJSONObject(json, FORMAT_SERVER);
+
+        // Free the cJSON object tree memory allocation
+        cJSON_Delete(json);
+
+        printf("=====================================================\n\n");
     }
     
     // Cleanup
