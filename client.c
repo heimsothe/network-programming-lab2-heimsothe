@@ -171,7 +171,7 @@ int main(int argc, char *argv[]) {
 
         // Clean up the cJSON object and the JSON string
         cJSON_Delete(json);
-        free(jsonString);
+        cJSON_free(jsonString);
 
         // Wait for 0.5 seconds before sending the next JSON object
         usleep(500000);
