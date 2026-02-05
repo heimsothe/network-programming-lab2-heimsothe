@@ -6,7 +6,7 @@
  *
  * Reads a custom data file containing key:value pairs, constructs
  * JSON objects using the cJSON library, serializes them to JSON
- * strings, and sends them to a UDP server.
+ * strings, and sends them to a UDP multicast group.
  *
  * Usage: ./client <ipaddr> <port>
  * ================================================================
@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
     
     // Step 1: Validate arguments (need exactly 3: program, IP, port)
     if (argc < 3) {
-        printf("Error: Usage is client <ipaddr> <portnumber>\n");
+        printf("Error: Usage is client <multicast_ip> <portnumber>\n");
         exit(1);
     }
 
@@ -86,6 +86,14 @@ int main(int argc, char *argv[]) {
     if (!inet_pton(AF_INET, argv[1], &server_address.sin_addr)) {
         printf("Error: Bad IP address\n");
         printf("Valid IP Range: 0.0.0.0 - 255.255.255.255\n");
+        exit(1);
+    }
+
+    // Validate that the IP address is in the multicast range
+    unsigned char firstOctet = ((unsigned char *)&server_address.sin_addr)[0];
+    if (firstOctet < 224 || firstOctet > 239) {
+        printf("Error: Not a multicast address: %s\n", argv[1]);
+        printf("Multicast range: 224.0.0.0 - 239.255.255.255\n");
         exit(1);
     }
 
@@ -106,7 +114,6 @@ int main(int argc, char *argv[]) {
     // Step 4: Create socket and complete server address struct
     printf("========================SETUP========================\n");
     setupSocket(&sd, portNumber, &server_address, SOCKET_CLIENT);
-
     printf("Socket created, server address set to %s:%d\n", argv[1], portNumber);
 
     // Step 5: Open the data file
