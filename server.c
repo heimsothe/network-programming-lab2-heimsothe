@@ -2,7 +2,7 @@
  * server.c — UDP Multicast Server for JSON Object Reception
  *
  * Author: Elijah Heimsoth
- * Date: 02-03-2026
+ * Date: 02-13-2026
  *
  * Joins a multicast group and receives serialized JSON strings over
  * UDP, deserializes them with cJSON, and prints each key-value pair.
@@ -18,7 +18,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <ctype.h>
 #include <unistd.h>
 
 // Networking headers
@@ -35,9 +34,11 @@
 // Constants
 #define BUFFER_SIZE 4096 // Maximum bytes for incoming UDP datagram
 
-// Declare joinMulticastGroup function
+// Function prototypes
+
 /* ================================================================
- * joinMulticastGroup() — Join a UDP socket to a multicast group
+ * joinMulticastGroup():
+ * Join a UDP socket to a multicast group
  *
  * Parameters:
  *  - sd: socket descriptor
@@ -49,52 +50,41 @@
  * ================================================================ */
 int joinMulticastGroup(int sd, const char *multicastIP);
 
+/* ================================================================
+ * main():
+ * Main function and orchestrator for Server
+ * 
+ * Flow:
+ *  1. Validate arguments (IP, multicast range, port)
+ *  2. Create socket and bind to port
+ *  3. Join the multicast group
+ *  4. Receive loop
+ *  5. Cleanup
+ * ================================================================ */
 int main(int argc, char *argv[]) {
     int sd; // Socket descriptor
     struct sockaddr_in server_address; // Server address
     int portNumber; // Port number
 
-    // Step 1: Validate arguments (need exactly 3: program, multicast_ip, port)
     printf("========================SETUP========================\n");
-    if (argc < 3) {
-        printf("Error: Usage is server <multicast_ip> <portnumber>\n");
-        printf("Example: ./server 239.0.0.1 5000\n");
-        exit(1);
-    }
 
-    // Step 2: Validate multicast IP address
+    /*
+     * Step 1: Validate arguments (IP, multicast range, port)
+     *
+     * validateArguments() checks argc, validates the IP format with
+     * inet_pton(), verifies the multicast range, and parses the port.
+     * 
+     * On success, the binary IP is written into a temporary in_addr.
+     * The server binds to INADDR_ANY, not the multicast IP. The 
+     * multicast IP is only used when joining the group via setsockopt.
+     */
     struct in_addr multicast_check;
-    if (inet_pton(AF_INET, argv[1], &multicast_check) != 1) {
-        printf("Error: Invalid IP address format: %s\n", argv[1]);
-        exit(1);
-    }
+    validateArguments(argc, argv, &multicast_check, &portNumber);
 
-    // Validate the IP is in the multicast range (224.0.0.0 - 239.255.255.255)
-    unsigned char firstOctet = ((unsigned char *)&multicast_check.s_addr)[0];
-    if (firstOctet < 224 || firstOctet > 239) {
-        printf("Error: Not a multicast address: %s\n", argv[1]);
-        printf("Multicast range: 224.0.0.0 - 239.255.255.255\n");
-        exit(1);
-    }
+    // Step 2: Create socket and bind to port
+    setupSocket(&sd, portNumber, &server_address, MODE_SERVER);
 
-    // Step 3: Validate port number (all digits, range 0-65535)
-    for (size_t i = 0; i < strlen(argv[2]); i++) {
-        if (!isdigit(argv[2][i])) {
-            printf("Error: The port number isn't a number\n");
-            exit(1);
-        }
-    }
-    portNumber = strtol(argv[2], NULL, 10);
-    if (portNumber < 0 || portNumber > 65535) {
-        printf("Error: Invalid port number\n");
-        printf("Valid Port Range: 0-65535\n");
-        exit(1);
-    }
-
-    // Step 4: Create socket and bind to port
-    setupSocket(&sd, portNumber, &server_address, SOCKET_SERVER);
-
-    // Step 5: Join the multicast group
+    // Step 3: Join the multicast group
     if (joinMulticastGroup(sd, argv[1]) == -1) {
         printf("Error: Failed to join multicast group %s\n", argv[1]);
         close(sd);
@@ -105,7 +95,7 @@ int main(int argc, char *argv[]) {
            argv[1], portNumber);
     printf("=====================================================\n\n");
 
-    // Step 6: Receive loop
+    // Step 4: Receive loop
     char buffer[BUFFER_SIZE]; // Buffer for incoming data
     struct sockaddr_in client_address; // Client address (filled by recvfrom)
     socklen_t addr_len; // Length of client address
@@ -143,7 +133,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Print the parsed JSON
-        printJSONObject(json, FORMAT_SERVER);
+        printJSONObject(json, MODE_SERVER, 0);
 
         // Free the cJSON object tree memory allocation
         cJSON_Delete(json);

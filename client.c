@@ -2,13 +2,14 @@
  * client.c — UDP Client for JSON Object Transmission
  * 
  * Author: Elijah Heimsoth
- * Date: 02-01-2026
+ * Date: 02-13-2026
  *
  * Reads a custom data file containing key:value pairs, constructs
  * JSON objects using the cJSON library, serializes them to JSON
  * strings, and sends them to a UDP multicast group.
  *
- * Usage: ./client <ipaddr> <port>
+ * Usage: ./client <multicast_ip> <port>
+ * Example: ./client 239.0.0.1 5000
  * ================================================================
  */
 
@@ -36,93 +37,69 @@
 
 // Function prototypes
 
-/*
+/* ================================================================
  * openFile():
  * Prompts the user for a filename and returns an open FILE pointer.
  * Re-prompts on invalid filenames.
- */
+ * ================================================================ */
 FILE *openFile();
 
-/*
+/* ================================================================
  * parseLine():
  * Parses a line of space-separated key:value pairs into a cJSON object.
  * Returns NULL for empty/invalid lines.
  * Any error on the line discards the entire line.
- */
+ * ================================================================ */
 cJSON *parseLine(const char *line);
 
-/*
+/* ================================================================
  * rtrim():
  * Strips trailing whitespace (including newline) from a string.
  * Used by openFile() to clean fgets() input.
- */
+ * ================================================================ */
 char *rtrim(char *s);
 
 /* ================================================================
- * main() - Main function and orchestrator for Client
+ * main():
+ * Main function and orchestrator for Client
  * 
  * Flow:
- *  1. Validate arguments (need exactly 3: program, IP, port)
- *  2. Validate and store IP Address in server_address
- *  3. Validate port number (all digits, range 0-65535)
- *  4. Create socket and complete server address struct
- *  5. Open the data file
- *  6. Read loop: parse each line, serialize, send
- *  7. Cleanup and exit
- * ================================================================
- */
+ *  1. Validate arguments (IP, multicast range, port)
+ *  2. Create socket and complete server address struct
+ *  3. Open the data file
+ *  4. Read loop: parse each line, serialize, send
+ *  5. Cleanup and exit
+ * ================================================================ */
 int main(int argc, char *argv[]) {
     int sd; // Socket descriptor
-    struct sockaddr_in server_address; // Server address structure for sendto()
-    int portNumber; // Port number (converted from string)
-    
-    // Step 1: Validate arguments (need exactly 3: program, IP, port)
-    if (argc < 3) {
-        printf("Error: Usage is client <multicast_ip> <portnumber>\n");
-        exit(1);
-    }
+    struct sockaddr_in server_address; // Server address
+    int portNumber; // Port number
 
-    // Step 2: Validate and store IP Address in server_address
-    if (!inet_pton(AF_INET, argv[1], &server_address.sin_addr)) {
-        printf("Error: Bad IP address\n");
-        printf("Valid IP Range: 0.0.0.0 - 255.255.255.255\n");
-        exit(1);
-    }
-
-    // Validate that the IP address is in the multicast range
-    unsigned char firstOctet = ((unsigned char *)&server_address.sin_addr)[0];
-    if (firstOctet < 224 || firstOctet > 239) {
-        printf("Error: Not a multicast address: %s\n", argv[1]);
-        printf("Multicast range: 224.0.0.0 - 239.255.255.255\n");
-        exit(1);
-    }
-
-    // Step 3: Validate port number (all digits, range 0-65535)
-    for (size_t i = 0; i < strlen(argv[2]); i++) {
-        if (!isdigit(argv[2][i])) {
-            printf("Error: The port number isn't a number\n");
-            exit(1);
-        }
-    }
-    portNumber = strtol(argv[2], NULL, 10);
-    if (portNumber < 0 || portNumber > 65535) {
-        printf("Error: Invalid port number\n");
-        printf("Valid Port Range: 0-65535\n");
-        exit(1);
-    }
-
-    // Step 4: Create socket and complete server address struct
     printf("========================SETUP========================\n");
-    setupSocket(&sd, portNumber, &server_address, SOCKET_CLIENT);
+
+    /*
+     * Step 1: Validate arguments (IP, multicast range, port)
+     *
+     * validateArguments() checks argc, validates the IP format with
+     * inet_pton(), verifies the multicast range, and parses the port.
+     * 
+     * On success, the binary IP is written directly into
+     * server_address.sin_addr, and the validated port number is
+     * stored in portNumber.
+     */
+    validateArguments(argc, argv, &server_address.sin_addr, &portNumber);
+
+    // Step 2: Create socket and complete server address struct
+    setupSocket(&sd, portNumber, &server_address, MODE_CLIENT);
     printf("Socket created, server address set to %s:%d\n", argv[1], portNumber);
 
-    // Step 5: Open the data file
+    // Step 3: Open the data file
     FILE *fptr = openFile();
     
     printf("File opened successfully\n");
     printf("=====================================================\n\n");
 
-    // Step 6: Read loop: parse each line, serialize, send
+    // Step 4: Read loop: parse each line, serialize, send
     char *line = NULL;
     size_t lineLen = 0;
     ssize_t lengthRead;
@@ -148,7 +125,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Print all key-value pairs.
-        printJSONObject(json, FORMAT_CLIENT);
+        printJSONObject(json, MODE_CLIENT, 0);
         printf("\n");
 
         // Send the JSON string
